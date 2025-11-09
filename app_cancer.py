@@ -34,7 +34,15 @@ def load_models():
 @st.cache_data
 def load_data():
     """Load the dataset"""
-    return pd.read_csv('dataset_med.csv')
+    df = pd.read_csv('dataset_med.csv')
+    
+    # Extract year and month from diagnosis_date if it exists
+    if 'diagnosis_date' in df.columns:
+        df['diagnosis_date'] = pd.to_datetime(df['diagnosis_date'])
+        df['diagnosis_year'] = df['diagnosis_date'].dt.year
+        df['diagnosis_month'] = df['diagnosis_date'].dt.month
+    
+    return df
 
 try:
     preprocessor, model = load_models()
@@ -289,52 +297,87 @@ else:
             )
         
         with col5:
-            diagnosis_year = st.number_input("Diagnosis Year", 2010, 2024, 2020)
-            diagnosis_month = st.selectbox("Diagnosis Month", list(range(1, 13)), index=0)
+            diagnosis_year = st.number_input("Diagnosis Year", 2010, 2024, 2020, step=1)
+            diagnosis_month = st.number_input("Diagnosis Month", 1, 12, 6, step=1)
         
         with col6:
-            # Additional features if they exist in the dataset
-            additional_cols = [col for col in df.columns if col not in [
-                'id', 'age', 'gender', 'bmi', 'cholesterol_level', 'country',
-                'smoking_status', 'cancer_stage', 'treatment_type', 'survived',
-                'diagnosis_date', 'end_treatment_date'
-            ]]
-            
-            additional_inputs = {}
-            for col in additional_cols[:3]:  # Limit to 3 additional features
-                if df[col].dtype == 'object':
-                    additional_inputs[col] = st.selectbox(f"{col.replace('_', ' ').title()}", df[col].unique())
-                else:
-                    additional_inputs[col] = st.number_input(
-                        f"{col.replace('_', ' ').title()}",
-                        float(df[col].min()),
-                        float(df[col].max()),
-                        float(df[col].median())
-                    )
+            family_history = st.selectbox("Family History", [0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
+            hypertension = st.selectbox("Hypertension", [0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
+        
+        st.markdown("---")
+        st.subheader("🏥 Medical Conditions")
+        
+        col7, col8, col9 = st.columns(3)
+        
+        with col7:
+            asthma = st.selectbox("Asthma", [0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
+        
+        with col8:
+            cirrhosis = st.selectbox("Cirrhosis", [0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
+        
+        with col9:
+            other_cancer = st.selectbox("Other Cancer", [0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
         
         # Submit button
         submitted = st.form_submit_button("🔮 Predict Survival", use_container_width=True)
     
     # Make prediction
     if submitted:
-        # Create input dataframe
+        # Create input dataframe with proper data types
         input_data = {
-            'age': age,
-            'gender': gender,
-            'bmi': bmi,
-            'cholesterol_level': cholesterol,
-            'country': country,
-            'smoking_status': smoking_status,
-            'cancer_stage': cancer_stage,
-            'treatment_type': treatment_type,
-            'diagnosis_year': diagnosis_year,
-            'diagnosis_month': diagnosis_month
+            'age': int(age),
+            'gender': str(gender),
+            'bmi': float(bmi),
+            'cholesterol_level': int(cholesterol),
+            'country': str(country),
+            'smoking_status': str(smoking_status),
+            'cancer_stage': str(cancer_stage),
+            'treatment_type': str(treatment_type),
+            'diagnosis_year': int(diagnosis_year),
+            'diagnosis_month': int(diagnosis_month),
+            'family_history': int(family_history),
+            'hypertension': int(hypertension),
+            'asthma': int(asthma),
+            'cirrhosis': int(cirrhosis),
+            'other_cancer': int(other_cancer)
         }
         
-        # Add additional inputs
-        input_data.update(additional_inputs)
-        
         input_df = pd.DataFrame([input_data])
+        
+        # Get the actual columns from training data (excluding target and ID columns)
+        train_cols = [col for col in df.columns if col not in ['id', 'survived', 'diagnosis_date', 'end_treatment_date']]
+        
+        # Add missing columns with default values from training data
+        for col in train_cols:
+            if col not in input_df.columns:
+                if col in df.columns:
+                    if df[col].dtype == 'object':
+                        input_df[col] = df[col].mode()[0]
+                    else:
+                        input_df[col] = df[col].median()
+        
+        # Reorder to match training data exactly
+        input_df = input_df[train_cols]
+        
+        # Match data types exactly with training data
+        for col in input_df.columns:
+            if col in df.columns:
+                # Convert to same dtype as training data
+                if df[col].dtype == 'object':
+                    input_df[col] = input_df[col].astype(str)
+                elif df[col].dtype == 'int64':
+                    input_df[col] = input_df[col].astype('int64')
+                elif df[col].dtype == 'float64':
+                    input_df[col] = input_df[col].astype('float64')
+        
+        # Debug info in expander
+        with st.expander("🔍 Debug Info"):
+            st.write("**Training Data Types:**")
+            st.write(df[train_cols].dtypes)
+            st.write("**Input Data Types:**")
+            st.write(input_df.dtypes)
+            st.write("**Input Values:**")
+            st.write(input_df)
         
         try:
             # Preprocess and predict
@@ -427,7 +470,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: #64748b; padding: 20px;'>
-        <p>🎗️ Lung Cancer Survival Prediction System | Built with Streamlit & LightGBM</p>
+        <p>🎗️ Lung Cancer Survival Prediction System | </p>
         <p>⚠️ This tool is for educational purposes only. Always consult healthcare professionals for medical decisions.</p>
     </div>
     """,
