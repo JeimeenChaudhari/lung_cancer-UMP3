@@ -9,6 +9,7 @@ import pickle
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import traceback
 
 # =====================================================
 # PAGE CONFIGURATION
@@ -25,30 +26,51 @@ st.set_page_config(
 @st.cache_resource
 def load_models():
     """Load the preprocessor and model"""
-    with open('preprocessor.pkl', 'rb') as f:
-        preprocessor = pickle.load(f)
-    with open('lung_cancer_model.pkl', 'rb') as f:
-        model = pickle.load(f)
-    return preprocessor, model
+    try:
+        with open('preprocessor.pkl', 'rb') as f:
+            preprocessor = pickle.load(f)
+        with open('lung_cancer_model.pkl', 'rb') as f:
+            model = pickle.load(f)
+        return preprocessor, model
+    except Exception as e:
+        st.error(f"❌ Error loading model files: {str(e)}")
+        st.info("Please ensure 'preprocessor.pkl' and 'lung_cancer_model.pkl' are in the root directory.")
+        raise e
 
 @st.cache_data
 def load_data():
     """Load the dataset"""
-    df = pd.read_csv('dataset_med.csv')
-    
-    # Extract year and month from diagnosis_date if it exists
-    if 'diagnosis_date' in df.columns:
-        df['diagnosis_date'] = pd.to_datetime(df['diagnosis_date'])
-        df['diagnosis_year'] = df['diagnosis_date'].dt.year
-        df['diagnosis_month'] = df['diagnosis_date'].dt.month
-    
-    return df
+    try:
+        df = pd.read_csv('dataset_med.csv')
+        
+        # Fix the diagnosis_date column for Arrow compatibility
+        if 'diagnosis_date' in df.columns:
+            # Convert to datetime first
+            df['diagnosis_date'] = pd.to_datetime(df['diagnosis_date'], errors='coerce')
+            # Extract year and month before converting to string
+            df['diagnosis_year'] = df['diagnosis_date'].dt.year
+            df['diagnosis_month'] = df['diagnosis_date'].dt.month
+            # Convert to string format to avoid Arrow serialization issues
+            df['diagnosis_date'] = df['diagnosis_date'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Similarly fix end_treatment_date if it exists
+        if 'end_treatment_date' in df.columns:
+            df['end_treatment_date'] = pd.to_datetime(df['end_treatment_date'], errors='coerce')
+            df['end_treatment_date'] = df['end_treatment_date'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        return df
+    except Exception as e:
+        st.error(f"❌ Error loading dataset: {str(e)}")
+        st.info("Please ensure 'dataset_med.csv' is in the root directory.")
+        raise e
 
+# Wrap everything in try-except for better error handling
 try:
     preprocessor, model = load_models()
     df = load_data()
 except Exception as e:
-    st.error(f"Error loading files: {e}")
+    st.error(f"**Critical Error:** {str(e)}")
+    st.code(traceback.format_exc())
     st.stop()
 
 # =====================================================
@@ -114,9 +136,9 @@ if page == "📊 Exploratory Data Analysis":
     with col1:
         st.metric("Total Patients", len(df))
     with col2:
-        st.metric("Survived", df['survived'].sum())
+        st.metric("Survived", int(df['survived'].sum()))
     with col3:
-        st.metric("Not Survived", len(df) - df['survived'].sum())
+        st.metric("Not Survived", int(len(df) - df['survived'].sum()))
     with col4:
         survival_rate = (df['survived'].sum() / len(df)) * 100
         st.metric("Survival Rate", f"{survival_rate:.1f}%")
@@ -240,10 +262,10 @@ if page == "📊 Exploratory Data Analysis":
                 color_discrete_map={0: '#ef4444', 1: '#22c55e'}
             )
             fig6.update_xaxes(
-    tickmode='array',
-    tickvals=[0, 1],
-    ticktext=['Not Survived', 'Survived']
-)
+                tickmode='array',
+                tickvals=[0, 1],
+                ticktext=['Not Survived', 'Survived']
+            )
             fig6.update_layout(height=350, showlegend=False)
             st.plotly_chart(fig6, use_container_width=True)
 
@@ -323,63 +345,63 @@ else:
     
     # Make prediction
     if submitted:
-        # Create input dataframe with proper data types
-        input_data = {
-            'age': int(age),
-            'gender': str(gender),
-            'bmi': float(bmi),
-            'cholesterol_level': int(cholesterol),
-            'country': str(country),
-            'smoking_status': str(smoking_status),
-            'cancer_stage': str(cancer_stage),
-            'treatment_type': str(treatment_type),
-            'diagnosis_year': int(diagnosis_year),
-            'diagnosis_month': int(diagnosis_month),
-            'family_history': int(family_history),
-            'hypertension': int(hypertension),
-            'asthma': int(asthma),
-            'cirrhosis': int(cirrhosis),
-            'other_cancer': int(other_cancer)
-        }
-        
-        input_df = pd.DataFrame([input_data])
-        
-        # Get the actual columns from training data (excluding target and ID columns)
-        train_cols = [col for col in df.columns if col not in ['id', 'survived', 'diagnosis_date', 'end_treatment_date']]
-        
-        # Add missing columns with default values from training data
-        for col in train_cols:
-            if col not in input_df.columns:
-                if col in df.columns:
-                    if df[col].dtype == 'object':
-                        input_df[col] = df[col].mode()[0]
-                    else:
-                        input_df[col] = df[col].median()
-        
-        # Reorder to match training data exactly
-        input_df = input_df[train_cols]
-        
-        # Match data types exactly with training data
-        for col in input_df.columns:
-            if col in df.columns:
-                # Convert to same dtype as training data
-                if df[col].dtype == 'object':
-                    input_df[col] = input_df[col].astype(str)
-                elif df[col].dtype == 'int64':
-                    input_df[col] = input_df[col].astype('int64')
-                elif df[col].dtype == 'float64':
-                    input_df[col] = input_df[col].astype('float64')
-        
-        # Debug info in expander
-        with st.expander("🔍 Debug Info"):
-            st.write("**Training Data Types:**")
-            st.write(df[train_cols].dtypes)
-            st.write("**Input Data Types:**")
-            st.write(input_df.dtypes)
-            st.write("**Input Values:**")
-            st.write(input_df)
-        
         try:
+            # Create input dataframe with proper data types
+            input_data = {
+                'age': int(age),
+                'gender': str(gender),
+                'bmi': float(bmi),
+                'cholesterol_level': int(cholesterol),
+                'country': str(country),
+                'smoking_status': str(smoking_status),
+                'cancer_stage': str(cancer_stage),
+                'treatment_type': str(treatment_type),
+                'diagnosis_year': int(diagnosis_year),
+                'diagnosis_month': int(diagnosis_month),
+                'family_history': int(family_history),
+                'hypertension': int(hypertension),
+                'asthma': int(asthma),
+                'cirrhosis': int(cirrhosis),
+                'other_cancer': int(other_cancer)
+            }
+            
+            input_df = pd.DataFrame([input_data])
+            
+            # Get the actual columns from training data (excluding target and ID columns)
+            train_cols = [col for col in df.columns if col not in ['id', 'survived', 'diagnosis_date', 'end_treatment_date']]
+            
+            # Add missing columns with default values from training data
+            for col in train_cols:
+                if col not in input_df.columns:
+                    if col in df.columns:
+                        if df[col].dtype == 'object':
+                            input_df[col] = df[col].mode()[0]
+                        else:
+                            input_df[col] = df[col].median()
+            
+            # Reorder to match training data exactly
+            input_df = input_df[train_cols]
+            
+            # Match data types exactly with training data
+            for col in input_df.columns:
+                if col in df.columns:
+                    # Convert to same dtype as training data
+                    if df[col].dtype == 'object':
+                        input_df[col] = input_df[col].astype(str)
+                    elif df[col].dtype == 'int64':
+                        input_df[col] = input_df[col].astype('int64')
+                    elif df[col].dtype == 'float64':
+                        input_df[col] = input_df[col].astype('float64')
+            
+            # Debug info in expander
+            with st.expander("🔍 Debug Info"):
+                st.write("**Training Data Types:**")
+                st.write(df[train_cols].dtypes)
+                st.write("**Input Data Types:**")
+                st.write(input_df.dtypes)
+                st.write("**Input Values:**")
+                st.write(input_df)
+            
             # Preprocess and predict
             input_processed = preprocessor.transform(input_df)
             prediction = model.predict(input_processed)[0]
@@ -463,14 +485,15 @@ else:
             st.plotly_chart(fig_prob, use_container_width=True)
             
         except Exception as e:
-            st.error(f"Error making prediction: {e}")
+            st.error(f"❌ Error making prediction: {str(e)}")
+            st.code(traceback.format_exc())
 
 # Footer
 st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: #64748b; padding: 20px;'>
-        <p>🎗️ Lung Cancer Survival Prediction System | </p>
+        <p>🎗️ Lung Cancer Survival Prediction System</p>
         <p>⚠️ This tool is for educational purposes only. Always consult healthcare professionals for medical decisions.</p>
     </div>
     """,
