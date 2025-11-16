@@ -1,20 +1,9 @@
-# --- Core ---
-numpy==2.2.0
+streamlit==1.36.0
 pandas==2.2.2
-
-# --- ML ---
-scikit-learn==1.7.1       # wheels for Py3.11 + NumPy 2
-scipy==1.16.3
-joblib==1.4.2
-threadpoolctl==3.6.0
-lightgbm==4.5.0
-
-
-# --- App ---
-streamlit==1.36.0         # allows numpy <3 (so NumPy 2.x is OK)
-rich==13.9.4              # keep <14 to satisfy streamlit 1.36
-
-# --- Viz (only if you use them) ---
-matplotlib==3.9.2         # 3.9+ supports NumPy 2
-seaborn==0.13.2
+numpy==2.2.0
+scikit-learn==1.7.1
 plotly==5.24.1
+matplotlib==3.9.2
+Pillow==10.4.0
+lightgbm==4.5.0
+seaborn==0.13.2
